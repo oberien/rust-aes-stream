@@ -1,6 +1,8 @@
-use super::*;
-use std::io::{Write, Read, Cursor};
+use std::io::{Write, Read, Cursor, Seek, SeekFrom};
+
 use crypto::aessafe::{AesSafe128Encryptor, AesSafe128Decryptor};
+
+use super::*;
 
 struct VecRefCursor<'a>(&'a mut Vec<u8>);
 
@@ -116,4 +118,22 @@ fn dec_read_unaligned() {
         if read == 0 { break; }
     }
     assert_eq!(dec, &orig);
+}
+
+#[test]
+fn dec_seek_start() {
+    let mut orig = Vec::new();
+    orig.extend(std::iter::repeat(()).take(128).enumerate().map(|(i, ())| i as u8));
+    let enc = encrypt(&orig);
+
+    let key = [0u8; 16];
+    let iv = vec![0u8; 16];
+    let block_dec = AesSafe128Decryptor::new(&key);
+    let mut aes = AesReader::new(Cursor::new(&enc), block_dec, iv);
+    let mut dec = [255u8; 16];
+    for i in 0..112 {
+        aes.seek(SeekFrom::Start(i as u64)).unwrap();
+        aes.read_exact(&mut dec).unwrap();
+        assert_eq!(dec, &orig[i..i+16]);
+    }
 }

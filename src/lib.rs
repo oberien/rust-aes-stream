@@ -115,11 +115,19 @@ impl<D: BlockDecryptor, R: Read> AesReader<D, R> {
     fn read_decrypt(&mut self, buf: &mut [u8]) -> Result<usize> {
         let buf_len = buf.len();
         let mut write_buf = RefWriteBuffer::new(buf);
-        let mut read_buf = RefReadBuffer::new(&[]);
+        let res;
+        let remaining;
+        {
+            let mut read_buf = RefReadBuffer::new(&self.buffer);
 
-        // test if CbcDecryptor still has enough decrypted data
-        let res = self.dec.decrypt(&mut read_buf, &mut write_buf, self.eof)
-            .map_err(|e| Error::new(ErrorKind::Other, format!("decryption error: {:?}", e)))?;
+            // test if CbcDecryptor still has enough decrypted data
+            res = self.dec.decrypt(&mut read_buf, &mut write_buf, self.eof)
+                .map_err(|e| Error::new(ErrorKind::Other, format!("decryption error: {:?}", e)))?;
+            remaining = read_buf.remaining();
+        }
+        // keep remaining bytes
+        let len = self.buffer.len();
+        self.buffer.drain(..(len - remaining));
         match res {
             BufferResult::BufferOverflow => return Ok(buf_len),
             BufferResult::BufferUnderflow if self.eof => return Ok(write_buf.position()),
@@ -134,6 +142,7 @@ impl<D: BlockDecryptor, R: Read> AesReader<D, R> {
         let mut dec_len = 0;
         while dec_len == 0 && !self.eof {
             let eof_buffer = self.fill_buf()?;
+            let remaining;
             {
                 let mut read_buf = RefReadBuffer::new(&self.buffer);
                 self.dec.decrypt(&mut read_buf, &mut write_buf, self.eof)
@@ -141,10 +150,11 @@ impl<D: BlockDecryptor, R: Read> AesReader<D, R> {
                 let mut dec = write_buf.take_read_buffer();
                 let dec = dec.take_remaining();
                 dec_len = dec.len();
+                remaining = read_buf.remaining();
             }
             // keep remaining bytes
             let len = self.buffer.len();
-            self.buffer.drain(..(len - read_buf.remaining()));
+            self.buffer.drain(..(len - remaining));
             // append newly read bytes
             self.buffer.extend(eof_buffer);
         }
@@ -167,15 +177,16 @@ impl<D: BlockDecryptor, R: Read + Seek> Seek for AesReader<D, R> {
                 let block_offset = offset % self.block_size as u64;
                 // reset CbcDecryptor
                 if block_num == 0 {
+                    self.reader.seek(SeekFrom::Start(0))?;
                     self.dec.reset(&self.iv);
                 } else {
-                    self.reader.seek(SeekFrom::Start(block_num * self.block_size as u64))?;
-                    self.buffer = Vec::new();
-                    self.eof = false;
+                    self.reader.seek(SeekFrom::Start((block_num - 1) * self.block_size as u64))?;
                     let mut iv = vec![0u8; self.block_size];
                     self.reader.read_exact(&mut iv)?;
                     self.dec.reset(&iv);
                 }
+                self.buffer = Vec::new();
+                self.eof = false;
                 let mut skip = vec![0u8; block_offset as usize];
                 self.read_exact(&mut skip)?;
                 Ok(offset)
