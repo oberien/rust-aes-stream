@@ -1,0 +1,15 @@
+[package]
+name = "aes-stream"
+version = "0.1.0"
+authors = ["oberien <jaro.fietz@gmx.de>"]
+license = "MIT/Apache-2.0"
+repository = "https://github.com/oberien/rust-aes-stream"
+description = "Read and Write Wrapper for AES Encryption and Decryption during I/O Operations"
+keywords = ["Crypto", "AES", "Read", "Write", "Stream"]
+readme = "README.md"
+
+[lib]
+name = "aesstream"
+
+[dependencies]
+rust-crypto = "0.2"
