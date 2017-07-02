@@ -1,3 +1,91 @@
+//! Read/Write Wrapper for AES Encryption and Decryption during I/O Operations
+//!
+//! This crate provides an [`AesWriter`](struct.AesWriter.html), which can be used to wrap any
+//! existing [`Write`](https://doc.rust-lang.org/std/io/trait.Write.html) implementation with AES
+//! encryption, and [`AesReader`](struct.AesReader.html), which can wrap any existing
+//! [`Read`](https://doc.rust-lang.org/std/io/trait.Read.html) implemntation with AES decryption.
+//! If the inner reader provides a [`Seek`](https://doc.rust-lang.org/std/io/trait.Seek.html)
+//! implementation, AesReader will do so as well.
+//! See their struct-level documentation for more information.
+//!
+//! # Examples
+//!
+//! You can use [`AesWriter`](struct.AesWriter.html) to wrap a file with encryption.
+//!
+//! ```no_run
+//! # extern crate crypto;
+//! # extern crate aesstream;
+//! # use std::io::{Write, Result};
+//! # use std::fs::File;
+//! # use crypto::aessafe::AesSafe128Encryptor;
+//! # use aesstream::AesWriter;
+//! # fn foo() -> Result<()> {
+//! let key = [0u8; 16];
+//! let iv = vec![0u8; 16];
+//! let file = File::open("...")?;
+//! let encryptor = AesSafe128Encryptor::new(&key);
+//! let mut writer = AesWriter::new(file, encryptor, iv.clone());
+//! writer.write_all("Hello World!".as_bytes())?;
+//! # Ok(())
+//! # }
+//! # fn main() {
+//! # let _ = foo();
+//! # }
+//! ```
+//!
+//! And [`AesReader`](struct.AesReader.html) to decrypt it again.
+//!
+//! ```no_run
+//! # extern crate crypto;
+//! # extern crate aesstream;
+//! # use std::io::{Read, Result};
+//! # use std::fs::File;
+//! # use crypto::aessafe::AesSafe128Decryptor;
+//! # use aesstream::AesReader;
+//! # fn foo() -> Result<()> {
+//! let key = [0u8; 16];
+//! let iv = vec![0u8; 16];
+//! let file = File::open("...")?;
+//! let decryptor = AesSafe128Decryptor::new(&key);
+//! let mut reader = AesReader::new(file, decryptor, iv.clone());
+//! let mut decrypted = String::new();
+//! reader.read_to_string(&mut decrypted)?;
+//! assert_eq!(decrypted, "Hello World!");
+//! # Ok(())
+//! # }
+//! # fn main() {
+//! # let _ = foo();
+//! # }
+//! ```
+//!
+//! Aesstream can be used to en- and decrypt in-memory as well.
+//!
+//! ```
+//! # extern crate crypto;
+//! # extern crate aesstream;
+//! # use std::io::{Read, Write, Result, Cursor};
+//! # use crypto::aessafe::{AesSafe128Encryptor, AesSafe128Decryptor};
+//! # use aesstream::{AesWriter, AesReader};
+//! # fn foo() -> Result<()> {
+//! let key = [0u8; 16];
+//! let iv = vec![0u8; 16];
+//! let encryptor = AesSafe128Encryptor::new(&key);
+//! let mut writer = AesWriter::new(Vec::new(), encryptor, iv.clone());
+//! writer.write_all("Hello World!".as_bytes())?;
+//! let encrypted = writer.into_inner()?;
+//!
+//! let decryptor = AesSafe128Decryptor::new(&key);
+//! let mut reader = AesReader::new(Cursor::new(encrypted), decryptor, iv);
+//! let mut decrypted = String::new();
+//! reader.read_to_string(&mut decrypted)?;
+//! assert_eq!(decrypted, "Hello World!");
+//! # Ok(())
+//! # }
+//! # fn main() {
+//! # let _ = foo();
+//! # }
+//! ```
+
 extern crate crypto;
 
 #[cfg(test)] mod tests;
@@ -10,6 +98,55 @@ use crypto::buffer::{RefReadBuffer, RefWriteBuffer, BufferResult, WriteBuffer, R
 
 const BUFFER_SIZE: usize = 8192;
 
+/// Wraps a [`Write`](https://doc.rust-lang.org/std/io/trait.Write.html) implementation with AES
+/// Encryption
+///
+/// # Examples
+///
+/// Write encrypted to a file.
+///
+/// ```no_run
+/// # extern crate crypto;
+/// # extern crate aesstream;
+/// # use std::io::{Write, Result};
+/// # use std::fs::File;
+/// # use crypto::aessafe::AesSafe128Encryptor;
+/// # use aesstream::AesWriter;
+/// # fn foo() -> Result<()> {
+/// let key = [0u8; 16];
+/// let iv = vec![0u8; 16];
+/// let file = File::open("...")?;
+/// let encryptor = AesSafe128Encryptor::new(&key);
+/// let mut writer = AesWriter::new(file, encryptor, iv.clone());
+/// writer.write_all("Hello World!".as_bytes())?;
+/// # Ok(())
+/// # }
+/// # fn main() {
+/// # let _ = foo();
+/// # }
+/// ```
+///
+/// Encrypt in-memory.
+///
+/// ```
+/// # extern crate crypto;
+/// # extern crate aesstream;
+/// # use std::io::{Write, Result, Cursor};
+/// # use crypto::aessafe::AesSafe128Encryptor;
+/// # use aesstream::AesWriter;
+/// # fn foo() -> Result<()> {
+/// let key = [0u8; 16];
+/// let iv = vec![0u8; 16];
+/// let encryptor = AesSafe128Encryptor::new(&key);
+/// let mut writer = AesWriter::new(Vec::new(), encryptor, iv.clone());
+/// writer.write_all("Hello World!".as_bytes())?;
+/// let encrypted = writer.into_inner()?;
+/// # Ok(())
+/// # }
+/// # fn main() {
+/// # let _ = foo();
+/// # }
+/// ```
 pub struct AesWriter<E: BlockEncryptor, W: Write> {
     writer: Option<W>,
     enc: CbcEncryptor<E, EncPadding<PkcsPadding>>,
