@@ -119,7 +119,7 @@ const BUFFER_SIZE: usize = 8192;
 /// let iv = vec![0u8; 16];
 /// let file = File::open("...")?;
 /// let encryptor = AesSafe128Encryptor::new(&key);
-/// let mut writer = AesWriter::new(file, encryptor, iv.clone());
+/// let mut writer = AesWriter::new(file, encryptor, iv);
 /// writer.write_all("Hello World!".as_bytes())?;
 /// # Ok(())
 /// # }
@@ -138,7 +138,7 @@ const BUFFER_SIZE: usize = 8192;
 /// let key = [0u8; 16];
 /// let iv = vec![0u8; 16];
 /// let encryptor = AesSafe128Encryptor::new(&key);
-/// let mut writer = AesWriter::new(Vec::new(), encryptor, iv.clone());
+/// let mut writer = AesWriter::new(Vec::new(), encryptor, iv);
 /// writer.write_all("Hello World!".as_bytes())?;
 /// let encrypted = writer.into_inner()?;
 /// # Ok(())
@@ -231,6 +231,13 @@ impl<E: BlockEncryptor, W: Write> AesWriter<E, W> {
         Ok(self.writer.take().unwrap())
     }
 
+    /// Encrypts passed buffer and writes all resulting encrypted blocks to the underlying writer
+    ///
+    /// # Parameters
+    ///
+    /// * **buf**: Plaintext to encrypt and write
+    /// * **eof**: If the provided buf is the last one to come and therefore encryption should be
+    ///     finished and padding added.
     fn encrypt_write(&mut self, buf: &[u8], eof: bool) -> Result<usize> {
         let mut read_buf = RefReadBuffer::new(buf);
         let mut out = [0u8; BUFFER_SIZE];
@@ -287,7 +294,7 @@ impl<E: BlockEncryptor, W: Write> Write for AesWriter<E, W> {
 }
 
 impl<E: BlockEncryptor, W: Write> Drop for AesWriter<E, W> {
-    /// Drops this AesWriter trying to finish encryption and write everything to the underlying writer.
+    /// Drops this AesWriter trying to finish encryption and to write everything to the underlying writer.
     fn drop(&mut self) {
         if self.writer.is_some() {
             if !std::thread::panicking() {
@@ -299,6 +306,56 @@ impl<E: BlockEncryptor, W: Write> Drop for AesWriter<E, W> {
     }
 }
 
+/// Wraps a [`Read`](https://doc.rust-lang.org/std/io/trait.Read.html) implementation with CBC
+/// based on given [`BlockDecryptor`][bd]
+///
+/// [bd]: https://docs.rs/rust-crypto/0.2.36/crypto/symmetriccipher/trait.BlockDecryptor.html
+///
+/// # Examples
+///
+/// Read encrypted file.
+///
+/// ```no_run
+/// # extern crate crypto;
+/// # extern crate aesstream;
+/// # use std::io::{Read, Result};
+/// # use std::fs::File;
+/// # use crypto::aessafe::AesSafe128Decryptor;
+/// # use aesstream::AesReader;
+/// # fn foo() -> Result<()> {
+/// let key = [0u8; 16];
+/// let iv = vec![0u8; 16];
+/// let file = File::open("...")?;
+/// let decryptor = AesSafe128Decryptor::new(&key);
+/// let mut reader = AesReader::new(file, decryptor, iv);
+/// let mut decrypted = Vec::new();
+/// reader.read_to_end(&mut decrypted)?;
+/// # Ok(())
+/// # }
+/// # fn main() { let _ = foo(); }
+/// ```
+///
+/// Decrypt in-memory.
+///
+/// ```
+/// # extern crate crypto;
+/// # extern crate aesstream;
+/// # use std::io::{Read, Result, Cursor};
+/// # use std::fs::File;
+/// # use crypto::aessafe::AesSafe128Decryptor;
+/// # use aesstream::AesReader;
+/// # fn foo() -> Result<()> {
+/// let encrypted = vec![];
+/// let key = [0u8; 16];
+/// let iv = vec![0u8; 16];
+/// let decryptor = AesSafe128Decryptor::new(&key);
+/// let mut reader = AesReader::new(Cursor::new(encrypted), decryptor, iv);
+/// let mut decrypted = Vec::new();
+/// reader.read_to_end(&mut decrypted)?;
+/// # Ok(())
+/// # }
+/// # fn main() { let _ = foo(); }
+/// ```
 pub struct AesReader<D: BlockDecryptor, R: Read> {
     /// Reader to read encrypted data from
     reader: R,
@@ -315,6 +372,39 @@ pub struct AesReader<D: BlockDecryptor, R: Read> {
 }
 
 impl<D: BlockDecryptor, R: Read> AesReader<D, R> {
+    /// Creates a new AesReader.
+    ///
+    /// # Parameters
+    ///
+    /// * **reader**: Reader to read encrypted data from
+    /// * **dec**: [`BlockDecryptor`][be] to use for decyrption
+    /// * **iv**: IV used for CBC operation. It must have a length of 16 bytes
+    ///
+    /// # Panics
+    ///
+    /// Panics if the passed IV does not have 16 bytes.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # extern crate crypto;
+    /// # extern crate aesstream;
+    /// # use crypto::aessafe::AesSafe128Decryptor;
+    /// # use std::io::Result;
+    /// # use std::fs::File;
+    /// # use aesstream::AesReader;
+    /// # fn foo() -> Result<()> {
+    /// let key = [0u8; 16];
+    /// let iv = vec![0u8; 16];
+    /// let decryptor = AesSafe128Decryptor::new(&key);
+    /// let file = File::open("...")?;
+    /// let mut reader = AesReader::new(file, decryptor, iv);
+    /// # Ok(())
+    /// # }
+    /// # fn main() { let _ = foo(); }
+    /// ```
+    ///
+    /// [be]: https://docs.rs/rust-crypto/0.2.36/crypto/symmetriccipher/trait.BlockEncryptor.html
     pub fn new(reader: R, dec: D, iv: Vec<u8>) -> AesReader<D, R> {
         assert_eq!(iv.len(), 16, "IV must be 16 bytes in length");
         AesReader {
@@ -327,10 +417,36 @@ impl<D: BlockDecryptor, R: Read> AesReader<D, R> {
         }
     }
 
+    /// Consumes self and returns the underlying reader.
+    ///
+    /// This method **does not** finish decryption and / or process padding.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # extern crate crypto;
+    /// # extern crate aesstream;
+    /// # use crypto::aessafe::AesSafe128Decryptor;
+    /// # use std::io::Result;
+    /// # use std::fs::File;
+    /// # use aesstream::AesReader;
+    /// # fn foo() -> Result<()> {
+    /// let key = [0u8; 16];
+    /// let iv = vec![0u8; 16];
+    /// let decryptor = AesSafe128Decryptor::new(&key);
+    /// let file = File::open("...")?;
+    /// let mut reader = AesReader::new(file, decryptor, iv);
+    /// // do something with reader
+    /// let file = reader.into_inner();
+    /// # Ok(())
+    /// # }
+    /// # fn main() { let _ = foo(); }
+    /// ```
     pub fn into_inner(self) -> R {
         self.reader
     }
 
+    /// Reads at max BUFFER_SIZE bytes, handles potential eof and returns the buffer as Vec<u8>
     fn fill_buf(&mut self) -> Result<Vec<u8>> {
         let mut eof_buffer = vec![0u8; BUFFER_SIZE];
         let read = self.reader.read(&mut eof_buffer)?;
@@ -339,7 +455,26 @@ impl<D: BlockDecryptor, R: Read> AesReader<D, R> {
         Ok(eof_buffer)
     }
 
+    /// Reads and decrypts data from the underlying stream and writes it into the passed buffer.
+    ///
+    /// The CbcDecryptor has an internal output buffer, but not an input buffer.
+    /// Therefore, we need to take care of letfover input.
+    /// Additionally, we need to handle eof correctly, as CbcDecryptor needs to correctly interpret
+    /// padding.
+    /// Thus, we need to read 2 buffers. The first one is read as input for decryption and the second
+    /// one to determine if eof is reached.
+    /// The next time this function is called, the second buffer is passed as input into decryption
+    /// and the first buffer is filled to find out if we reached eof.
+    ///
+    /// # Parameters
+    ///
+    /// * **buf**: Buffer to write decrypted data into.
     fn read_decrypt(&mut self, buf: &mut [u8]) -> Result<usize> {
+        // if this is the first iteration, fill internal buffer
+        if self.buffer.is_empty() && !self.eof {
+            self.buffer = self.fill_buf()?;
+        }
+
         let buf_len = buf.len();
         let mut write_buf = RefWriteBuffer::new(buf);
         let res;
@@ -347,7 +482,7 @@ impl<D: BlockDecryptor, R: Read> AesReader<D, R> {
         {
             let mut read_buf = RefReadBuffer::new(&self.buffer);
 
-            // test if CbcDecryptor still has enough decrypted data
+            // test if CbcDecryptor still has enough decrypted data or we have enough buffered
             res = self.dec.decrypt(&mut read_buf, &mut write_buf, self.eof)
                 .map_err(|e| Error::new(ErrorKind::Other, format!("decryption error: {:?}", e)))?;
             remaining = read_buf.remaining();
@@ -355,18 +490,19 @@ impl<D: BlockDecryptor, R: Read> AesReader<D, R> {
         // keep remaining bytes
         let len = self.buffer.len();
         self.buffer.drain(..(len - remaining));
+        // if we were able to decrypt, return early
         match res {
             BufferResult::BufferOverflow => return Ok(buf_len),
             BufferResult::BufferUnderflow if self.eof => return Ok(write_buf.position()),
             _ => {}
         }
 
-        // if this is the first iteration, fill internal buffer
-        if self.buffer.is_empty() && !self.eof {
-            self.buffer = self.fill_buf()?;
-        }
-
+        // else read new buffer
         let mut dec_len = 0;
+        // We must return something, if we have something.
+        // If the reader doesn't return enough so that we can decrypt a block, we need to continue
+        // reading until we have enough data to return one decrypted block, or until we reach eof.
+        // If we reach eof, we will be able to decrypt the final block because of padding.
         while dec_len == 0 && !self.eof {
             let eof_buffer = self.fill_buf()?;
             let remaining;
@@ -390,6 +526,8 @@ impl<D: BlockDecryptor, R: Read> AesReader<D, R> {
 }
 
 impl<D: BlockDecryptor, R: Read> Read for AesReader<D, R> {
+    /// Reads encrypted data from the underlying reader, decrypts it and writes the result into the
+    /// passed buffer.
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         let read = self.read_decrypt(buf)?;
         Ok(read)
@@ -397,6 +535,11 @@ impl<D: BlockDecryptor, R: Read> Read for AesReader<D, R> {
 }
 
 impl<D: BlockDecryptor, R: Read + Seek> Seek for AesReader<D, R> {
+    /// Seek to an offset, in bytes, in a stream.
+    /// [Read more](https://doc.rust-lang.org/nightly/std/io/trait.Seek.html#tymethod.seek)
+    ///
+    /// When seeking, this reader takes care of reinitializing the CbcDecryptor with the correct IV.
+    /// The passed position does *not* need to be aligned to the blocksize.
     fn seek(&mut self, pos: SeekFrom) -> Result<u64> {
         match pos {
             SeekFrom::Start(offset) => {

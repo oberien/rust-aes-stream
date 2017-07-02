@@ -85,6 +85,14 @@ fn dec_unaligned() {
 }
 
 #[test]
+fn dec_block_aligned() {
+    let orig = [0u8; 48];
+    let mut enc = encrypt(&orig);
+    let dec = decrypt(UnalignedReader::new(&mut enc, 16));
+    assert_eq!(dec, &orig[..]);
+}
+
+#[test]
 fn dec_read_unaligned() {
     let orig = [0u8; 16];
     let enc = encrypt(&orig);
