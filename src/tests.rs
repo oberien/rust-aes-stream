@@ -8,9 +8,12 @@ fn encrypt(data: &[u8]) -> Vec<u8> {
     let key = [0u8; 16];
     let iv = vec![0u8; 16];
     let block_enc = AesSafe128Encryptor::new(&key);
-    let mut aes = AesWriter::new(Vec::new(), block_enc, iv.clone());
-    aes.write_all(&data).unwrap();
-    aes.into_inner().unwrap()
+    let mut enc = Vec::new();
+    {
+        let mut aes = AesWriter::new(&mut enc, block_enc, iv.clone());
+        aes.write_all(&data).unwrap();
+    }
+    enc
 }
 
 fn decrypt<R: Read>(data: R) -> Vec<u8> {
@@ -48,11 +51,13 @@ fn enc_unaligned() {
     let key = [0u8; 16];
     let iv = vec![0u8; 16];
     let block_enc = AesSafe128Encryptor::new(&key);
-    let mut aes = AesWriter::new(Vec::new(), block_enc, iv.clone());
-    for chunk in orig.chunks(3) {
-        aes.write_all(&chunk).unwrap();
+    let mut enc = Vec::new();
+    {
+        let mut aes = AesWriter::new(&mut enc, block_enc, iv.clone());
+        for chunk in orig.chunks(3) {
+            aes.write_all(&chunk).unwrap();
+        }
     }
-    let enc = aes.into_inner().unwrap();
     assert_eq!(enc.len(), 32);
     let dec = decrypt(Cursor::new(&enc));
     assert_eq!(dec, &orig);

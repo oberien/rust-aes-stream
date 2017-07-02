@@ -72,9 +72,11 @@
 //! let key = [0u8; 16];
 //! let iv = vec![0u8; 16];
 //! let encryptor = AesSafe128Encryptor::new(&key);
-//! let mut writer = AesWriter::new(Vec::new(), encryptor, iv.clone());
-//! writer.write_all("Hello World!".as_bytes())?;
-//! let encrypted = writer.into_inner()?;
+//! let mut encrypted = Vec::new();
+//! {
+//!     let mut writer = AesWriter::new(&mut encrypted, encryptor, iv.clone());
+//!     writer.write_all("Hello World!".as_bytes())?;
+//! }
 //!
 //! let decryptor = AesSafe128Decryptor::new(&key);
 //! let mut reader = AesReader::new(Cursor::new(encrypted), decryptor, iv);
@@ -138,9 +140,11 @@ const BUFFER_SIZE: usize = 8192;
 /// let key = [0u8; 16];
 /// let iv = vec![0u8; 16];
 /// let encryptor = AesSafe128Encryptor::new(&key);
-/// let mut writer = AesWriter::new(Vec::new(), encryptor, iv);
-/// writer.write_all("Hello World!".as_bytes())?;
-/// let encrypted = writer.into_inner()?;
+/// let mut encrypted = Vec::new();
+/// {
+///     let mut writer = AesWriter::new(&mut encrypted, encryptor, iv);
+///     writer.write_all("Hello World!".as_bytes())?;
+/// }
 /// # Ok(())
 /// # }
 /// # fn main() { let _ = foo(); }
@@ -195,40 +199,6 @@ impl<E: BlockEncryptor, W: Write> AesWriter<E, W> {
             enc: CbcEncryptor::new(enc, PkcsPadding, iv),
             closed: false,
         }
-    }
-
-    /// Consumes self and returns the underlying writer.
-    ///
-    /// This method finishes encryption and flushes the internal encryption buffer.
-    ///
-    /// # Errors
-    ///
-    /// If flushing fails, the error is returned.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// # extern crate crypto;
-    /// # extern crate aesstream;
-    /// # use crypto::aessafe::AesSafe128Encryptor;
-    /// # use std::io::Result;
-    /// # use std::fs::File;
-    /// # use aesstream::AesWriter;
-    /// # fn foo() -> Result<()> {
-    /// let key = [0u8; 16];
-    /// let iv = vec![0u8; 16];
-    /// let encryptor = AesSafe128Encryptor::new(&key);
-    /// let file = File::open("...")?;
-    /// let mut writer = AesWriter::new(file, encryptor, iv);
-    /// // do something with writer
-    /// let file = writer.into_inner()?;
-    /// # Ok(())
-    /// # }
-    /// # fn main() { let _ = foo(); }
-    /// ```
-    pub fn into_inner(mut self) -> Result<W> {
-        self.flush()?;
-        Ok(self.writer.take().unwrap())
     }
 
     /// Encrypts passed buffer and writes all resulting encrypted blocks to the underlying writer
@@ -415,35 +385,6 @@ impl<D: BlockDecryptor, R: Read> AesReader<D, R> {
             buffer: Vec::new(),
             eof: false,
         }
-    }
-
-    /// Consumes self and returns the underlying reader.
-    ///
-    /// This method **does not** finish decryption and / or process padding.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// # extern crate crypto;
-    /// # extern crate aesstream;
-    /// # use crypto::aessafe::AesSafe128Decryptor;
-    /// # use std::io::Result;
-    /// # use std::fs::File;
-    /// # use aesstream::AesReader;
-    /// # fn foo() -> Result<()> {
-    /// let key = [0u8; 16];
-    /// let iv = vec![0u8; 16];
-    /// let decryptor = AesSafe128Decryptor::new(&key);
-    /// let file = File::open("...")?;
-    /// let mut reader = AesReader::new(file, decryptor, iv);
-    /// // do something with reader
-    /// let file = reader.into_inner();
-    /// # Ok(())
-    /// # }
-    /// # fn main() { let _ = foo(); }
-    /// ```
-    pub fn into_inner(self) -> R {
-        self.reader
     }
 
     /// Reads at max BUFFER_SIZE bytes, handles potential eof and returns the buffer as Vec<u8>
