@@ -8,6 +8,12 @@
 //! implementation, AesReader will do so as well.
 //! See their struct-level documentation for more information.
 //!
+//! In fact this crate is not limited to AES.
+//! It can wrap any kind of [`BlockEncryptor`][be] i.e. [`BlockDecryptor`][bd] with CBC.
+//!
+//! [be]: https://docs.rs/rust-crypto/0.2.36/crypto/symmetriccipher/trait.BlockEncryptor.html
+//! [bd]: https://docs.rs/rust-crypto/0.2.36/crypto/symmetriccipher/trait.BlockEncryptor.html
+//!
 //! # Examples
 //!
 //! You can use [`AesWriter`](struct.AesWriter.html) to wrap a file with encryption.
@@ -28,9 +34,7 @@
 //! writer.write_all("Hello World!".as_bytes())?;
 //! # Ok(())
 //! # }
-//! # fn main() {
-//! # let _ = foo();
-//! # }
+//! # fn main() { let _ = foo(); }
 //! ```
 //!
 //! And [`AesReader`](struct.AesReader.html) to decrypt it again.
@@ -53,12 +57,10 @@
 //! assert_eq!(decrypted, "Hello World!");
 //! # Ok(())
 //! # }
-//! # fn main() {
-//! # let _ = foo();
-//! # }
+//! # fn main() { let _ = foo(); }
 //! ```
 //!
-//! Aesstream can be used to en- and decrypt in-memory as well.
+//! They can be used to en- and decrypt in-memory as well.
 //!
 //! ```
 //! # extern crate crypto;
@@ -81,9 +83,7 @@
 //! assert_eq!(decrypted, "Hello World!");
 //! # Ok(())
 //! # }
-//! # fn main() {
-//! # let _ = foo();
-//! # }
+//! # fn main() { let _ = foo(); }
 //! ```
 
 extern crate crypto;
@@ -98,8 +98,10 @@ use crypto::buffer::{RefReadBuffer, RefWriteBuffer, BufferResult, WriteBuffer, R
 
 const BUFFER_SIZE: usize = 8192;
 
-/// Wraps a [`Write`](https://doc.rust-lang.org/std/io/trait.Write.html) implementation with AES
-/// Encryption
+/// Wraps a [`Write`](https://doc.rust-lang.org/std/io/trait.Write.html) implementation with CBC
+/// based on given [`BlockEncryptor`][be]
+///
+/// [be]: https://docs.rs/rust-crypto/0.2.36/crypto/symmetriccipher/trait.BlockEncryptor.html
 ///
 /// # Examples
 ///
@@ -121,9 +123,7 @@ const BUFFER_SIZE: usize = 8192;
 /// writer.write_all("Hello World!".as_bytes())?;
 /// # Ok(())
 /// # }
-/// # fn main() {
-/// # let _ = foo();
-/// # }
+/// # fn main() { let _ = foo(); }
 /// ```
 ///
 /// Encrypt in-memory.
@@ -143,18 +143,53 @@ const BUFFER_SIZE: usize = 8192;
 /// let encrypted = writer.into_inner()?;
 /// # Ok(())
 /// # }
-/// # fn main() {
-/// # let _ = foo();
-/// # }
+/// # fn main() { let _ = foo(); }
 /// ```
 pub struct AesWriter<E: BlockEncryptor, W: Write> {
+    /// Writer to write encrypted data to
     writer: Option<W>,
+    /// Encryptor to encrypt data with
     enc: CbcEncryptor<E, EncPadding<PkcsPadding>>,
+    /// Indicates weather the encryptor has done its final operation (inserting padding)
     closed: bool,
 }
 
 impl<E: BlockEncryptor, W: Write> AesWriter<E, W> {
+    /// Creates a new AesWriter.
+    ///
+    /// # Parameters
+    ///
+    /// * **writer**: Writer to write encrypted data into
+    /// * **enc**: [`BlockEncryptor`][be] to use for encyrption
+    /// * **iv**: IV used for CBC operation. It must have a length of 16 bytes
+    ///
+    /// # Panics
+    ///
+    /// Panics if the passed IV does not have 16 bytes.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # extern crate crypto;
+    /// # extern crate aesstream;
+    /// # use crypto::aessafe::AesSafe128Encryptor;
+    /// # use std::io::Result;
+    /// # use std::fs::File;
+    /// # use aesstream::AesWriter;
+    /// # fn foo() -> Result<()> {
+    /// let key = [0u8; 16];
+    /// let iv = vec![0u8; 16];
+    /// let encryptor = AesSafe128Encryptor::new(&key);
+    /// let file = File::open("...")?;
+    /// let mut writer = AesWriter::new(file, encryptor, iv);
+    /// # Ok(())
+    /// # }
+    /// # fn main() { let _ = foo(); }
+    /// ```
+    ///
+    /// [be]: https://docs.rs/rust-crypto/0.2.36/crypto/symmetriccipher/trait.BlockEncryptor.html
     pub fn new(writer: W, enc: E, iv: Vec<u8>) -> AesWriter<E, W> {
+        assert_eq!(iv.len(), 16, "IV must be 16 bytes in length");
         AesWriter {
             writer: Some(writer),
             enc: CbcEncryptor::new(enc, PkcsPadding, iv),
@@ -162,6 +197,35 @@ impl<E: BlockEncryptor, W: Write> AesWriter<E, W> {
         }
     }
 
+    /// Consumes self and returns the underlying writer.
+    ///
+    /// This method finishes encryption and flushes the internal encryption buffer.
+    ///
+    /// # Errors
+    ///
+    /// If flushing fails, the error is returned.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # extern crate crypto;
+    /// # extern crate aesstream;
+    /// # use crypto::aessafe::AesSafe128Encryptor;
+    /// # use std::io::Result;
+    /// # use std::fs::File;
+    /// # use aesstream::AesWriter;
+    /// # fn foo() -> Result<()> {
+    /// let key = [0u8; 16];
+    /// let iv = vec![0u8; 16];
+    /// let encryptor = AesSafe128Encryptor::new(&key);
+    /// let file = File::open("...")?;
+    /// let mut writer = AesWriter::new(file, encryptor, iv);
+    /// // do something with writer
+    /// let file = writer.into_inner()?;
+    /// # Ok(())
+    /// # }
+    /// # fn main() { let _ = foo(); }
+    /// ```
     pub fn into_inner(mut self) -> Result<W> {
         self.flush()?;
         Ok(self.writer.take().unwrap())
@@ -184,13 +248,20 @@ impl<E: BlockEncryptor, W: Write> AesWriter<E, W> {
                 BufferResult::BufferOverflow => {},
             }
         }
-        // CbcEncryptor has its own internal buffer and always consumes everything
+        // CbcEncryptor has its own internal buffer and always consumes all input
         assert_eq!(read_buf.remaining(), 0);
         Ok(buf.len())
     }
 }
 
 impl<E: BlockEncryptor, W: Write> Write for AesWriter<E, W> {
+    /// Encrypts the passed buffer and writes the result to the underlying writer.
+    ///
+    /// Due to the blocksize of CBC not all data will be written instantaneously.
+    /// For example if 17 bytes are passed, the first 16 will be encrypted as one block and written
+    /// the underlying writer, but the last byte won't be encrypted and written yet.
+    ///
+    /// If [`flush`](#method.flush) has been called, this method will always return an error.
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         if self.closed {
             return Err(Error::new(ErrorKind::Other, "AesWriter is closed"));
@@ -199,6 +270,12 @@ impl<E: BlockEncryptor, W: Write> Write for AesWriter<E, W> {
         Ok(written)
     }
 
+    /// Flush this output stream, ensuring that all intermediately buffered contents reach their destination.
+    /// [Read more](https://doc.rust-lang.org/nightly/std/io/trait.Write.html#tymethod.flush)
+    ///
+    /// **Warning**: When this method is called, the encryption will finish and insert final padding.
+    /// After calling `flush`, this writer cannot be written to anymore and will always return an
+    /// error.
     fn flush(&mut self) -> Result<()> {
         if self.closed {
             return Ok(());
@@ -210,10 +287,14 @@ impl<E: BlockEncryptor, W: Write> Write for AesWriter<E, W> {
 }
 
 impl<E: BlockEncryptor, W: Write> Drop for AesWriter<E, W> {
+    /// Drops this AesWriter trying to finish encryption and write everything to the underlying writer.
     fn drop(&mut self) {
         if self.writer.is_some() {
-            // drop impls should not panic, therefore ignore the result of flush
-            let _ = self.flush();
+            if !std::thread::panicking() {
+                self.flush().unwrap();
+            } else {
+                let _ = self.flush();
+            }
         }
     }
 }
@@ -235,6 +316,7 @@ pub struct AesReader<D: BlockDecryptor, R: Read> {
 
 impl<D: BlockDecryptor, R: Read> AesReader<D, R> {
     pub fn new(reader: R, dec: D, iv: Vec<u8>) -> AesReader<D, R> {
+        assert_eq!(iv.len(), 16, "IV must be 16 bytes in length");
         AesReader {
             reader: reader,
             block_size: dec.block_size(),
