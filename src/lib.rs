@@ -191,7 +191,10 @@ impl<D: BlockDecryptor, R: Read + Seek> Seek for AesReader<D, R> {
                 self.read_exact(&mut skip)?;
                 Ok(offset)
             },
-            _ => unimplemented!()
+            SeekFrom::Current(_) | SeekFrom::End(_) => {
+                let pos = self.reader.seek(pos)?;
+                self.seek(SeekFrom::Start(pos))
+            },
         }
     }
 }

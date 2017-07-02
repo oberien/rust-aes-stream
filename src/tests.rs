@@ -137,3 +137,61 @@ fn dec_seek_start() {
         assert_eq!(dec, &orig[i..i+16]);
     }
 }
+
+#[test]
+fn dec_seek_current() {
+    let mut orig = Vec::new();
+    orig.extend(std::iter::repeat(()).take(128).enumerate().map(|(i, ())| i as u8));
+    let enc = encrypt(&orig);
+
+    let key = [0u8; 16];
+    let iv = vec![0u8; 16];
+    let block_dec = AesSafe128Decryptor::new(&key);
+    let mut aes = AesReader::new(Cursor::new(&enc), block_dec, iv);
+    let mut dec = [255u8; 16];
+    aes.seek(SeekFrom::Start(0)).unwrap();
+    for i in 0..112 {
+        let pos = aes.seek(SeekFrom::Current(0)).unwrap();
+        aes.seek(SeekFrom::Current(i as i64 - pos as i64)).unwrap();
+        aes.read_exact(&mut dec).unwrap();
+        assert_eq!(dec, &orig[i..i+16]);
+    }
+}
+
+#[test]
+fn dec_seek_end() {
+    let mut orig = Vec::new();
+    orig.extend(std::iter::repeat(()).take(127).enumerate().map(|(i, ())| i as u8));
+    let enc = encrypt(&orig);
+
+    let key = [0u8; 16];
+    let iv = vec![0u8; 16];
+    let block_dec = AesSafe128Decryptor::new(&key);
+    let mut aes = AesReader::new(Cursor::new(&enc), block_dec, iv);
+    let mut dec = [255u8; 16];
+    for i in 1..113 {
+        aes.seek(SeekFrom::End(-(i as i64)-16)).unwrap();
+        aes.read_exact(&mut dec).unwrap();
+        assert_eq!(dec, &orig[(112-i)..(112-i+16)]);
+    }
+}
+
+#[test]
+fn dec_seek_current_backwards() {
+    let mut orig = Vec::new();
+    orig.extend(std::iter::repeat(()).take(128).enumerate().map(|(i, ())| i as u8));
+    let enc = encrypt(&orig);
+
+    let key = [0u8; 16];
+    let iv = vec![0u8; 16];
+    let block_dec = AesSafe128Decryptor::new(&key);
+    let mut aes = AesReader::new(Cursor::new(&enc), block_dec, iv);
+    let mut dec = [255u8; 16];
+    aes.seek(SeekFrom::Start(0)).unwrap();
+    for i in (0..112).rev() {
+        let pos = aes.seek(SeekFrom::Current(0)).unwrap();
+        aes.seek(SeekFrom::Current(i as i64 - pos as i64)).unwrap();
+        aes.read_exact(&mut dec).unwrap();
+        assert_eq!(dec, &orig[i..i+16]);
+    }
+}
