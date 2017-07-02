@@ -11,7 +11,7 @@ use crypto::buffer::{RefReadBuffer, RefWriteBuffer, BufferResult, WriteBuffer, R
 const BUFFER_SIZE: usize = 8192;
 
 pub struct AesWriter<E: BlockEncryptor, W: Write> {
-    writer: W,
+    writer: Option<W>,
     enc: CbcEncryptor<E, EncPadding<PkcsPadding>>,
     closed: bool,
 }
@@ -19,10 +19,15 @@ pub struct AesWriter<E: BlockEncryptor, W: Write> {
 impl<E: BlockEncryptor, W: Write> AesWriter<E, W> {
     pub fn new(writer: W, enc: E, iv: Vec<u8>) -> AesWriter<E, W> {
         AesWriter {
-            writer: writer,
+            writer: Some(writer),
             enc: CbcEncryptor::new(enc, PkcsPadding, iv),
             closed: false,
         }
+    }
+
+    pub fn into_inner(mut self) -> Result<W> {
+        self.flush()?;
+        Ok(self.writer.take().unwrap())
     }
 
     fn encrypt_write(&mut self, buf: &[u8], eof: bool) -> Result<usize> {
@@ -34,7 +39,7 @@ impl<E: BlockEncryptor, W: Write> AesWriter<E, W> {
                 .map_err(|e| Error::new(ErrorKind::Other, format!("encryption error: {:?}", e)))?;
             let mut enc = write_buf.take_read_buffer();
             let enc = enc.take_remaining();
-            self.writer.write_all(enc)?;
+            self.writer.as_mut().unwrap().write_all(enc)?;
             match res {
                 BufferResult::BufferUnderflow => break,
                 BufferResult::BufferOverflow if eof =>
@@ -63,15 +68,14 @@ impl<E: BlockEncryptor, W: Write> Write for AesWriter<E, W> {
         }
         self.encrypt_write(&[], true)?;
         self.closed = true;
-        self.writer.flush()
+        self.writer.as_mut().unwrap().flush()
     }
 }
 
 impl<E: BlockEncryptor, W: Write> Drop for AesWriter<E, W> {
     fn drop(&mut self) {
-        if !std::thread::panicking() {
-            self.flush().unwrap();
-        } else {
+        if self.writer.is_some() {
+            // drop impls should not panic, therefore ignore the result of flush
             let _ = self.flush();
         }
     }
@@ -102,6 +106,10 @@ impl<D: BlockDecryptor, R: Read> AesReader<D, R> {
             buffer: Vec::new(),
             eof: false,
         }
+    }
+
+    pub fn into_inner(self) -> R {
+        self.reader
     }
 
     fn fill_buf(&mut self) -> Result<Vec<u8>> {

@@ -4,28 +4,13 @@ use crypto::aessafe::{AesSafe128Encryptor, AesSafe128Decryptor};
 
 use super::*;
 
-struct VecRefCursor<'a>(&'a mut Vec<u8>);
-
-impl<'a> Write for VecRefCursor<'a> {
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        self.0.write(buf)
-    }
-
-    fn flush(&mut self) -> Result<()> {
-        self.0.flush()
-    }
-}
-
 fn encrypt(data: &[u8]) -> Vec<u8> {
     let key = [0u8; 16];
     let iv = vec![0u8; 16];
     let block_enc = AesSafe128Encryptor::new(&key);
-    let mut enc = Vec::new();
-    {
-        let mut aes = AesWriter::new(VecRefCursor(&mut enc), block_enc, iv.clone());
-        aes.write_all(&data).unwrap();
-    }
-    enc
+    let mut aes = AesWriter::new(Vec::new(), block_enc, iv.clone());
+    aes.write_all(&data).unwrap();
+    aes.into_inner().unwrap()
 }
 
 fn decrypt<R: Read>(data: R) -> Vec<u8> {
@@ -63,13 +48,11 @@ fn enc_unaligned() {
     let key = [0u8; 16];
     let iv = vec![0u8; 16];
     let block_enc = AesSafe128Encryptor::new(&key);
-    let mut enc = Vec::new();
-    {
-        let mut aes = AesWriter::new(VecRefCursor(&mut enc), block_enc, iv.clone());
-        for chunk in orig.chunks(3) {
-            aes.write_all(&chunk).unwrap();
-        }
+    let mut aes = AesWriter::new(Vec::new(), block_enc, iv.clone());
+    for chunk in orig.chunks(3) {
+        aes.write_all(&chunk).unwrap();
     }
+    let enc = aes.into_inner().unwrap();
     assert_eq!(enc.len(), 32);
     let dec = decrypt(Cursor::new(&enc));
     assert_eq!(dec, &orig);
