@@ -169,7 +169,7 @@ impl<E: BlockEncryptor, W: Write> AesWriter<E, W> {
     ///
     /// # Panics
     ///
-    /// Panics if the passed IV does not have 16 bytes.
+    /// Panics if the passed IV has a different length than the blocksize of `enc`.
     ///
     /// # Examples
     ///
@@ -193,7 +193,7 @@ impl<E: BlockEncryptor, W: Write> AesWriter<E, W> {
     ///
     /// [be]: https://docs.rs/rust-crypto/0.2.36/crypto/symmetriccipher/trait.BlockEncryptor.html
     pub fn new(writer: W, enc: E, iv: Vec<u8>) -> AesWriter<E, W> {
-        assert_eq!(iv.len(), 16, "IV must be 16 bytes in length");
+        assert_eq!(iv.len(), enc.block_size(), "IV must be one block in size");
         AesWriter {
             writer: Some(writer),
             enc: CbcEncryptor::new(enc, PkcsPadding, iv),
@@ -347,12 +347,12 @@ impl<D: BlockDecryptor, R: Read> AesReader<D, R> {
     /// # Parameters
     ///
     /// * **reader**: Reader to read encrypted data from
-    /// * **dec**: [`BlockDecryptor`][be] to use for decyrption
+    /// * **dec**: [`BlockDecryptor`][bd] to use for decyrption
     /// * **iv**: IV used for CBC operation. It must have a length of 16 bytes
     ///
     /// # Panics
     ///
-    /// Panics if the passed IV does not have 16 bytes.
+    /// Panics if the passed IV has a different length than the blocksize of `dec`.
     ///
     /// # Examples
     ///
@@ -374,9 +374,9 @@ impl<D: BlockDecryptor, R: Read> AesReader<D, R> {
     /// # fn main() { let _ = foo(); }
     /// ```
     ///
-    /// [be]: https://docs.rs/rust-crypto/0.2.36/crypto/symmetriccipher/trait.BlockEncryptor.html
+    /// [bd]: https://docs.rs/rust-crypto/0.2.36/crypto/symmetriccipher/trait.BlockDecryptor.html
     pub fn new(reader: R, dec: D, iv: Vec<u8>) -> AesReader<D, R> {
-        assert_eq!(iv.len(), 16, "IV must be 16 bytes in length");
+        assert_eq!(iv.len(), dec.block_size(), "IV must be one block in size");
         AesReader {
             reader: reader,
             block_size: dec.block_size(),
