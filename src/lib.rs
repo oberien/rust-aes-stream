@@ -16,79 +16,96 @@
 //!
 //! # Examples
 //!
+//! All examples use the following extern crates and imports:
+//!
+//! ```ignore
+//! extern crate crypto;
+//! extern crate rand;
+//! extern crate aesstream;
+//!
+//! use std::io::{Read, Write, Cursor};
+//! use std::fs::File;
+//! use crypto::aessafe::{AesSafe128Encryptor, AesSafe128Decryptor};
+//! use rand::{Rng, OsRng};
+//! use aesstream::{AesWriter, AesReader};
+//! ```
+//!
 //! You can use [`AesWriter`](struct.AesWriter.html) to wrap a file with encryption.
 //!
 //! ```no_run
 //! # extern crate crypto;
+//! # extern crate rand;
 //! # extern crate aesstream;
 //! # use std::io::{Write, Result};
 //! # use std::fs::File;
 //! # use crypto::aessafe::AesSafe128Encryptor;
+//! # use rand::{Rng, OsRng};
 //! # use aesstream::AesWriter;
-//! # fn foo() -> Result<()> {
-//! let key = [0u8; 16];
-//! let iv = vec![0u8; 16];
+//! # fn encrypt() -> Result<()> {
+//! let key: [u8; 16] = OsRng::new()?.gen();
 //! let file = File::open("...")?;
 //! let encryptor = AesSafe128Encryptor::new(&key);
-//! let mut writer = AesWriter::new(file, encryptor, iv.clone());
+//! let mut writer = AesWriter::new(file, encryptor)?;
 //! writer.write_all("Hello World!".as_bytes())?;
 //! # Ok(())
 //! # }
-//! # fn main() { let _ = foo(); }
+//! # fn main() { let _ = encrypt(); }
 //! ```
 //!
 //! And [`AesReader`](struct.AesReader.html) to decrypt it again.
 //!
 //! ```no_run
 //! # extern crate crypto;
+//! # extern crate rand;
 //! # extern crate aesstream;
 //! # use std::io::{Read, Result};
 //! # use std::fs::File;
 //! # use crypto::aessafe::AesSafe128Decryptor;
+//! # use rand::{Rng, OsRng};
 //! # use aesstream::AesReader;
-//! # fn foo() -> Result<()> {
-//! let key = [0u8; 16];
-//! let iv = vec![0u8; 16];
+//! # fn decrypt() -> Result<()> {
+//! let key: [u8; 16] = OsRng::new()?.gen();
 //! let file = File::open("...")?;
 //! let decryptor = AesSafe128Decryptor::new(&key);
-//! let mut reader = AesReader::new(file, decryptor, iv.clone());
+//! let mut reader = AesReader::new(file, decryptor)?;
 //! let mut decrypted = String::new();
 //! reader.read_to_string(&mut decrypted)?;
 //! assert_eq!(decrypted, "Hello World!");
 //! # Ok(())
 //! # }
-//! # fn main() { let _ = foo(); }
+//! # fn main() { let _ = decrypt(); }
 //! ```
 //!
 //! They can be used to en- and decrypt in-memory as well.
 //!
 //! ```
 //! # extern crate crypto;
+//! # extern crate rand;
 //! # extern crate aesstream;
 //! # use std::io::{Read, Write, Result, Cursor};
 //! # use crypto::aessafe::{AesSafe128Encryptor, AesSafe128Decryptor};
+//! # use rand::{Rng, OsRng};
 //! # use aesstream::{AesWriter, AesReader};
-//! # fn foo() -> Result<()> {
-//! let key = [0u8; 16];
-//! let iv = vec![0u8; 16];
+//! # fn in_memory() -> Result<()> {
+//! let key: [u8; 16] = OsRng::new()?.gen();
 //! let encryptor = AesSafe128Encryptor::new(&key);
 //! let mut encrypted = Vec::new();
 //! {
-//!     let mut writer = AesWriter::new(&mut encrypted, encryptor, iv.clone());
+//!     let mut writer = AesWriter::new(&mut encrypted, encryptor)?;
 //!     writer.write_all("Hello World!".as_bytes())?;
 //! }
-//!
 //! let decryptor = AesSafe128Decryptor::new(&key);
-//! let mut reader = AesReader::new(Cursor::new(encrypted), decryptor, iv);
+//! let mut reader = AesReader::new(Cursor::new(encrypted), decryptor)?;
 //! let mut decrypted = String::new();
 //! reader.read_to_string(&mut decrypted)?;
 //! assert_eq!(decrypted, "Hello World!");
 //! # Ok(())
 //! # }
-//! # fn main() { let _ = foo(); }
+//! # fn main() { let _ = in_memory(); }
 //! ```
 
 extern crate crypto;
+extern crate rand;
 
 #[cfg(test)] mod tests;
 
@@ -97,6 +114,7 @@ use std::io::{Read, Write, Seek, SeekFrom, Result, Error, ErrorKind};
 use crypto::symmetriccipher::{BlockDecryptor, BlockEncryptor, Encryptor, Decryptor};
 use crypto::blockmodes::{PkcsPadding, CbcEncryptor, CbcDecryptor, EncPadding, DecPadding};
 use crypto::buffer::{RefReadBuffer, RefWriteBuffer, BufferResult, WriteBuffer, ReadBuffer};
+use rand::{OsRng, Rng};
 
 const BUFFER_SIZE: usize = 8192;
 
@@ -111,17 +129,18 @@ const BUFFER_SIZE: usize = 8192;
 ///
 /// ```no_run
 /// # extern crate crypto;
+/// # extern crate rand;
 /// # extern crate aesstream;
 /// # use std::io::{Write, Result};
 /// # use std::fs::File;
 /// # use crypto::aessafe::AesSafe128Encryptor;
+/// # use rand::{OsRng, Rng};
 /// # use aesstream::AesWriter;
 /// # fn foo() -> Result<()> {
-/// let key = [0u8; 16];
-/// let iv = vec![0u8; 16];
+/// let key: [u8; 16] = OsRng::new()?.gen();
 /// let file = File::open("...")?;
 /// let encryptor = AesSafe128Encryptor::new(&key);
-/// let mut writer = AesWriter::new(file, encryptor, iv);
+/// let mut writer = AesWriter::new(file, encryptor)?;
 /// writer.write_all("Hello World!".as_bytes())?;
 /// # Ok(())
 /// # }
@@ -132,17 +151,18 @@ const BUFFER_SIZE: usize = 8192;
 ///
 /// ```
 /// # extern crate crypto;
+/// # extern crate rand;
 /// # extern crate aesstream;
 /// # use std::io::{Write, Result, Cursor};
 /// # use crypto::aessafe::AesSafe128Encryptor;
+/// # use rand::{OsRng, Rng};
 /// # use aesstream::AesWriter;
 /// # fn foo() -> Result<()> {
-/// let key = [0u8; 16];
-/// let iv = vec![0u8; 16];
+/// let key: [u8; 16] = OsRng::new()?.gen();
 /// let encryptor = AesSafe128Encryptor::new(&key);
 /// let mut encrypted = Vec::new();
 /// {
-///     let mut writer = AesWriter::new(&mut encrypted, encryptor, iv);
+///     let mut writer = AesWriter::new(&mut encrypted, encryptor)?;
 ///     writer.write_all("Hello World!".as_bytes())?;
 /// }
 /// # Ok(())
@@ -159,46 +179,46 @@ pub struct AesWriter<E: BlockEncryptor, W: Write> {
 }
 
 impl<E: BlockEncryptor, W: Write> AesWriter<E, W> {
-    /// Creates a new AesWriter.
+    /// Creates a new AesWriter with a random IV.
+    ///
+    /// The IV will be written as first block of the file.
     ///
     /// # Parameters
     ///
     /// * **writer**: Writer to write encrypted data into
     /// * **enc**: [`BlockEncryptor`][be] to use for encyrption
-    /// * **iv**: IV used for CBC operation. It must have a length of 16 bytes
-    ///
-    /// # Panics
-    ///
-    /// Panics if the passed IV has a different length than the blocksize of `enc`.
     ///
     /// # Examples
     ///
     /// ```no_run
     /// # extern crate crypto;
+    /// # extern crate rand;
     /// # extern crate aesstream;
     /// # use crypto::aessafe::AesSafe128Encryptor;
+    /// # use rand::{OsRng, Rng};
     /// # use std::io::Result;
     /// # use std::fs::File;
     /// # use aesstream::AesWriter;
     /// # fn foo() -> Result<()> {
-    /// let key = [0u8; 16];
-    /// let iv = vec![0u8; 16];
+    /// let key: [u8; 16] = OsRng::new()?.gen();
     /// let encryptor = AesSafe128Encryptor::new(&key);
     /// let file = File::open("...")?;
-    /// let mut writer = AesWriter::new(file, encryptor, iv);
+    /// let mut writer = AesWriter::new(file, encryptor)?;
     /// # Ok(())
     /// # }
     /// # fn main() { let _ = foo(); }
     /// ```
     ///
     /// [be]: https://docs.rs/rust-crypto/0.2.36/crypto/symmetriccipher/trait.BlockEncryptor.html
-    pub fn new(writer: W, enc: E, iv: Vec<u8>) -> AesWriter<E, W> {
-        assert_eq!(iv.len(), enc.block_size(), "IV must be one block in size");
-        AesWriter {
+    pub fn new(mut writer: W, enc: E) -> Result<AesWriter<E, W>> {
+        let mut iv = vec![0u8; enc.block_size()];
+        OsRng::new()?.fill_bytes(&mut iv);
+        writer.write_all(&iv)?;
+        Ok(AesWriter {
             writer: Some(writer),
             enc: CbcEncryptor::new(enc, PkcsPadding, iv),
             closed: false,
-        }
+        })
     }
 
     /// Encrypts passed buffer and writes all resulting encrypted blocks to the underlying writer
@@ -287,17 +307,18 @@ impl<E: BlockEncryptor, W: Write> Drop for AesWriter<E, W> {
 ///
 /// ```no_run
 /// # extern crate crypto;
+/// # extern crate rand;
 /// # extern crate aesstream;
 /// # use std::io::{Read, Result};
 /// # use std::fs::File;
 /// # use crypto::aessafe::AesSafe128Decryptor;
+/// # use rand::{OsRng, Rng};
 /// # use aesstream::AesReader;
 /// # fn foo() -> Result<()> {
-/// let key = [0u8; 16];
-/// let iv = vec![0u8; 16];
+/// let key: [u8; 16] = OsRng::new()?.gen();
 /// let file = File::open("...")?;
 /// let decryptor = AesSafe128Decryptor::new(&key);
-/// let mut reader = AesReader::new(file, decryptor, iv);
+/// let mut reader = AesReader::new(file, decryptor)?;
 /// let mut decrypted = Vec::new();
 /// reader.read_to_end(&mut decrypted)?;
 /// # Ok(())
@@ -309,17 +330,18 @@ impl<E: BlockEncryptor, W: Write> Drop for AesWriter<E, W> {
 ///
 /// ```
 /// # extern crate crypto;
+/// # extern crate rand;
 /// # extern crate aesstream;
 /// # use std::io::{Read, Result, Cursor};
 /// # use std::fs::File;
 /// # use crypto::aessafe::AesSafe128Decryptor;
+/// # use rand::{OsRng, Rng};
 /// # use aesstream::AesReader;
 /// # fn foo() -> Result<()> {
 /// let encrypted = vec![];
-/// let key = [0u8; 16];
-/// let iv = vec![0u8; 16];
+/// let key: [u8; 16] = OsRng::new()?.gen();
 /// let decryptor = AesSafe128Decryptor::new(&key);
-/// let mut reader = AesReader::new(Cursor::new(encrypted), decryptor, iv);
+/// let mut reader = AesReader::new(Cursor::new(encrypted), decryptor)?;
 /// let mut decrypted = Vec::new();
 /// reader.read_to_end(&mut decrypted)?;
 /// # Ok(())
@@ -331,8 +353,6 @@ pub struct AesReader<D: BlockDecryptor, R: Read> {
     reader: R,
     /// Decryptor to decrypt data with
     dec: CbcDecryptor<D, DecPadding<PkcsPadding>>,
-    /// IV used if seeked to the first block
-    iv: Vec<u8>,
     /// Block size of BlockDecryptor, needed when seeking to correctly seek to the nearest block
     block_size: usize,
     /// Buffer used to store blob needed to find out if we reached eof
@@ -344,47 +364,45 @@ pub struct AesReader<D: BlockDecryptor, R: Read> {
 impl<D: BlockDecryptor, R: Read> AesReader<D, R> {
     /// Creates a new AesReader.
     ///
+    /// Assumes that the first block of given reader is the IV.
+    ///
     /// # Parameters
     ///
     /// * **reader**: Reader to read encrypted data from
     /// * **dec**: [`BlockDecryptor`][bd] to use for decyrption
-    /// * **iv**: IV used for CBC operation. It must have a length of 16 bytes
-    ///
-    /// # Panics
-    ///
-    /// Panics if the passed IV has a different length than the blocksize of `dec`.
     ///
     /// # Examples
     ///
     /// ```no_run
     /// # extern crate crypto;
+    /// # extern crate rand;
     /// # extern crate aesstream;
     /// # use crypto::aessafe::AesSafe128Decryptor;
+    /// # use rand::{OsRng, Rng};
     /// # use std::io::Result;
     /// # use std::fs::File;
     /// # use aesstream::AesReader;
     /// # fn foo() -> Result<()> {
-    /// let key = [0u8; 16];
-    /// let iv = vec![0u8; 16];
+    /// let key: [u8; 16] = OsRng::new()?.gen();
     /// let decryptor = AesSafe128Decryptor::new(&key);
     /// let file = File::open("...")?;
-    /// let mut reader = AesReader::new(file, decryptor, iv);
+    /// let mut reader = AesReader::new(file, decryptor)?;
     /// # Ok(())
     /// # }
     /// # fn main() { let _ = foo(); }
     /// ```
     ///
     /// [bd]: https://docs.rs/rust-crypto/0.2.36/crypto/symmetriccipher/trait.BlockDecryptor.html
-    pub fn new(reader: R, dec: D, iv: Vec<u8>) -> AesReader<D, R> {
-        assert_eq!(iv.len(), dec.block_size(), "IV must be one block in size");
-        AesReader {
+    pub fn new(mut reader: R, dec: D) -> Result<AesReader<D, R>> {
+        let mut iv = vec![0u8; dec.block_size()];
+        reader.read_exact(&mut iv)?;
+        Ok(AesReader {
             reader: reader,
             block_size: dec.block_size(),
-            iv: iv.clone(),
             dec: CbcDecryptor::new(dec, PkcsPadding, iv),
             buffer: Vec::new(),
             eof: false,
-        }
+        })
     }
 
     /// Reads at max BUFFER_SIZE bytes, handles potential eof and returns the buffer as Vec<u8>
@@ -464,6 +482,30 @@ impl<D: BlockDecryptor, R: Read> AesReader<D, R> {
         }
         Ok(dec_len)
     }
+
+}
+impl<D: BlockDecryptor, R: Read + Seek> AesReader<D, R> {
+    /// Seeks to *offset* from the start of the file
+    fn seek_from_start(&mut self, offset: u64) -> Result<u64> {
+        println!("pos before: {}", self.reader.seek(SeekFrom::Current(0)).unwrap());
+        println!("offset: {}", offset);
+        let block_num = offset / self.block_size as u64;
+        println!("block_num: {}", block_num);
+        let block_offset = offset % self.block_size as u64;
+        // reset CbcDecryptor
+        self.reader.seek(SeekFrom::Start((block_num - 1) * self.block_size as u64))?;
+        let mut iv = vec![0u8; self.block_size];
+        self.reader.read_exact(&mut iv)?;
+        println!("iv: {:?}", iv);
+        self.dec.reset(&iv);
+        self.buffer = Vec::new();
+        self.eof = false;
+        let mut skip = vec![0u8; block_offset as usize];
+        self.read_exact(&mut skip)?;
+        println!("pos after: {}", self.reader.seek(SeekFrom::Current(0)).unwrap());
+        // subtract IV
+        Ok(offset - 16)
+    }
 }
 
 impl<D: BlockDecryptor, R: Read> Read for AesReader<D, R> {
@@ -484,27 +526,13 @@ impl<D: BlockDecryptor, R: Read + Seek> Seek for AesReader<D, R> {
     fn seek(&mut self, pos: SeekFrom) -> Result<u64> {
         match pos {
             SeekFrom::Start(offset) => {
-                let block_num = offset / self.block_size as u64;
-                let block_offset = offset % self.block_size as u64;
-                // reset CbcDecryptor
-                if block_num == 0 {
-                    self.reader.seek(SeekFrom::Start(0))?;
-                    self.dec.reset(&self.iv);
-                } else {
-                    self.reader.seek(SeekFrom::Start((block_num - 1) * self.block_size as u64))?;
-                    let mut iv = vec![0u8; self.block_size];
-                    self.reader.read_exact(&mut iv)?;
-                    self.dec.reset(&iv);
-                }
-                self.buffer = Vec::new();
-                self.eof = false;
-                let mut skip = vec![0u8; block_offset as usize];
-                self.read_exact(&mut skip)?;
-                Ok(offset)
+                // +16 because first block is the iv
+                self.seek_from_start(offset + 16)
             },
-            SeekFrom::Current(_) | SeekFrom::End(_) => {
+            SeekFrom::End(_) | SeekFrom::Current(_) => {
                 let pos = self.reader.seek(pos)?;
-                self.seek(SeekFrom::Start(pos))
+                println!("curpos: {}", pos);
+                self.seek_from_start(pos)
             },
         }
     }

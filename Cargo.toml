@@ -13,3 +13,4 @@ name = "aesstream"
 
 [dependencies]
 rust-crypto = "0.2"
+rand = "0.3"
