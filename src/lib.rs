@@ -18,7 +18,7 @@
 //!
 //! All examples use the following extern crates and imports:
 //!
-//! ```ignore
+//! ```no_run
 //! extern crate crypto;
 //! extern crate rand;
 //! extern crate aesstream;
@@ -28,6 +28,7 @@
 //! use crypto::aessafe::{AesSafe128Encryptor, AesSafe128Decryptor};
 //! use rand::{Rng, OsRng};
 //! use aesstream::{AesWriter, AesReader};
+//! # fn main() {}
 //! ```
 //!
 //! You can use [`AesWriter`](struct.AesWriter.html) to wrap a file with encryption.
@@ -43,7 +44,7 @@
 //! # use aesstream::AesWriter;
 //! # fn encrypt() -> Result<()> {
 //! let key: [u8; 16] = OsRng::new()?.gen();
-//! let file = File::open("...")?;
+//! let file = File::create("...")?;
 //! let encryptor = AesSafe128Encryptor::new(&key);
 //! let mut writer = AesWriter::new(file, encryptor)?;
 //! writer.write_all("Hello World!".as_bytes())?;
@@ -138,7 +139,7 @@ const BUFFER_SIZE: usize = 8192;
 /// # use aesstream::AesWriter;
 /// # fn foo() -> Result<()> {
 /// let key: [u8; 16] = OsRng::new()?.gen();
-/// let file = File::open("...")?;
+/// let file = File::create("...")?;
 /// let encryptor = AesSafe128Encryptor::new(&key);
 /// let mut writer = AesWriter::new(file, encryptor)?;
 /// writer.write_all("Hello World!".as_bytes())?;
@@ -202,7 +203,7 @@ impl<E: BlockEncryptor, W: Write> AesWriter<E, W> {
     /// # fn foo() -> Result<()> {
     /// let key: [u8; 16] = OsRng::new()?.gen();
     /// let encryptor = AesSafe128Encryptor::new(&key);
-    /// let file = File::open("...")?;
+    /// let file = File::create("...")?;
     /// let mut writer = AesWriter::new(file, encryptor)?;
     /// # Ok(())
     /// # }
