@@ -488,22 +488,17 @@ impl<D: BlockDecryptor, R: Read> AesReader<D, R> {
 impl<D: BlockDecryptor, R: Read + Seek> AesReader<D, R> {
     /// Seeks to *offset* from the start of the file
     fn seek_from_start(&mut self, offset: u64) -> Result<u64> {
-        println!("pos before: {}", self.reader.seek(SeekFrom::Current(0)).unwrap());
-        println!("offset: {}", offset);
         let block_num = offset / self.block_size as u64;
-        println!("block_num: {}", block_num);
         let block_offset = offset % self.block_size as u64;
         // reset CbcDecryptor
         self.reader.seek(SeekFrom::Start((block_num - 1) * self.block_size as u64))?;
         let mut iv = vec![0u8; self.block_size];
         self.reader.read_exact(&mut iv)?;
-        println!("iv: {:?}", iv);
         self.dec.reset(&iv);
         self.buffer = Vec::new();
         self.eof = false;
         let mut skip = vec![0u8; block_offset as usize];
         self.read_exact(&mut skip)?;
-        println!("pos after: {}", self.reader.seek(SeekFrom::Current(0)).unwrap());
         // subtract IV
         Ok(offset - 16)
     }
@@ -532,7 +527,6 @@ impl<D: BlockDecryptor, R: Read + Seek> Seek for AesReader<D, R> {
             },
             SeekFrom::End(_) | SeekFrom::Current(_) => {
                 let pos = self.reader.seek(pos)?;
-                println!("curpos: {}", pos);
                 self.seek_from_start(pos)
             },
         }

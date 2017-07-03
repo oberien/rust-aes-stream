@@ -142,12 +142,8 @@ fn dec_seek_current() {
     aes.seek(SeekFrom::Start(0)).unwrap();
     for i in 0..112 {
         let pos = aes.seek(SeekFrom::Current(0)).unwrap();
-        println!("pos: {}", pos);
-        println!("i: {}", i);
         aes.seek(SeekFrom::Current(i as i64 - pos as i64)).unwrap();
-        println!("postseek");
         aes.read_exact(&mut dec).unwrap();
-        println!("read: {:?}", dec);
         assert_eq!(dec, &orig[i..i+16]);
     }
 }
@@ -182,7 +178,6 @@ fn dec_seek_current_backwards() {
     aes.seek(SeekFrom::Start(0)).unwrap();
     for i in (0..112).rev() {
         let pos = aes.seek(SeekFrom::Current(0)).unwrap();
-        println!("pos: {}", pos);
         aes.seek(SeekFrom::Current(i as i64 - pos as i64)).unwrap();
         aes.read_exact(&mut dec).unwrap();
         assert_eq!(dec, &orig[i..i+16]);
